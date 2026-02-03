@@ -13,8 +13,11 @@
     <div style="flex:1"></div>
     <button class="btn btn-purple btn-sm" style="margin:0.3rem 0" data-action="click->pipeline#openImportModal">📥 Import</button>
     <button class="btn btn-amber btn-sm" style="margin:0.3rem 0" data-sim-btn data-action="click->simulation#start">▶ Simulate</button>
-    <button class="btn btn-green btn-sm" style="margin:0.3rem 0" data-action="click->pipeline#openSaveModal">
+    <button class="btn btn-cyan btn-sm" style="margin:0.3rem 0" data-action="click->pipeline#openSaveModal">
       ⬆ Save Config
+    </button>
+    <button class="btn btn-green btn-sm" style="margin:0.3rem 0" data-action="click->pipeline#openCommunityModal">
+      🌐 Save to Community
     </button>
   </div>
 
@@ -278,73 +281,72 @@
     </div>
 
   </div>
-</div>
 
-
-<!-- Data Preview Panel -->
-<div class="data-preview-panel" data-simulation-target="previewPanel">
-  <div class="data-preview-header">
-    <h3 data-simulation-target="previewTitle">Component Data Preview</h3>
-    <button class="btn btn-sm" data-action="click->simulation#closePreview">✕ Close</button>
-  </div>
-  <div class="data-preview-body">
-    <div class="data-preview-col">
-      <h4>▸ Before (Input)</h4>
-      <pre data-simulation-target="previewBefore"></pre>
+  <!-- Data Preview Panel (INSIDE controller scope) -->
+  <div class="data-preview-panel" data-simulation-target="previewPanel">
+    <div class="data-preview-header">
+      <h3 data-simulation-target="previewTitle">Component Data Preview</h3>
+      <button class="btn btn-sm" data-action="click->simulation#closePreview">✕ Close</button>
     </div>
-    <div class="data-preview-col">
-      <h4>▸ After (Output)</h4>
-      <pre data-simulation-target="previewAfter"></pre>
-    </div>
-  </div>
-</div>
-
-<!-- Save Modal -->
-<div class="modal-overlay" data-pipeline-target="saveModal">
-  <div class="modal">
-    <h3>⬆ Save Configuration</h3>
-    <div class="config-field">
-      <label>Name</label>
-      <input type="text" data-pipeline-target="saveName" placeholder="My OTel Config">
-    </div>
-    <div class="config-field">
-      <label>Description</label>
-      <textarea data-pipeline-target="saveDescription" placeholder="What this config does..."></textarea>
-    </div>
-    <div class="config-field">
-      <label>Tags</label>
-      <div class="save-tags" data-pipeline-target="saveTags">
-        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="kubernetes"> kubernetes</label>
-        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="docker"> docker</label>
-        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="logs"> logs</label>
-        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="traces"> traces</label>
-        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="metrics"> metrics</label>
-        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="production"> production</label>
-        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="development"> development</label>
-        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="monitoring"> monitoring</label>
-        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="alerting"> alerting</label>
+    <div class="data-preview-body">
+      <div class="data-preview-col">
+        <h4>▸ Before (Input)</h4>
+        <pre data-simulation-target="previewBefore"></pre>
+      </div>
+      <div class="data-preview-col">
+        <h4>▸ After (Output)</h4>
+        <pre data-simulation-target="previewAfter"></pre>
       </div>
     </div>
-    <div class="modal-actions">
-      <button class="btn" data-action="click->pipeline#closeSaveModal">Cancel</button>
-      <button class="btn btn-green" data-action="click->pipeline#saveConfig">Save</button>
+  </div>
+
+  <!-- Save Config Modal (INSIDE controller scope) -->
+  <div class="modal-overlay" data-pipeline-target="saveModal">
+    <div class="modal">
+      <h3>⬆ Save Configuration</h3>
+      <p style="color:var(--text-dim);font-size:0.8rem;margin-bottom:0.75rem">Save your config and get a shareable link.</p>
+      <div class="config-field">
+        <label>Name</label>
+        <input type="text" data-pipeline-target="saveName" placeholder="My OTel Config">
+      </div>
+      <div class="config-field">
+        <label>Description</label>
+        <textarea data-pipeline-target="saveDescription" placeholder="What this config does..."></textarea>
+      </div>
+      <div class="config-field">
+        <label>Tags</label>
+        <div class="save-tags" data-pipeline-target="saveTags">
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="kubernetes"> kubernetes</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="docker"> docker</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="logs"> logs</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="traces"> traces</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="metrics"> metrics</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="production"> production</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="development"> development</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="monitoring"> monitoring</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="alerting"> alerting</label>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" data-action="click->pipeline#closeSaveModal">Cancel</button>
+        <button class="btn btn-cyan" data-action="click->pipeline#saveConfig">⬆ Save & Get Link</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- Import Modal -->
-<div class="modal-overlay" data-pipeline-target="importModal">
-  <div class="modal" style="max-width:600px">
-    <h3 style="color:var(--purple)">📥 Import OTel Collector Config</h3>
-    <p style="color:var(--text-dim);font-size:0.8rem;margin-bottom:0.75rem">Paste an existing OpenTelemetry Collector YAML config or upload a file to populate the visual builder.</p>
-    <div class="config-field">
-      <label>Upload File</label>
-      <input type="file" accept=".yaml,.yml" data-pipeline-target="importFile" data-action="change->pipeline#handleImportFile"
-             style="font-size:0.8rem;color:var(--text-dim);background:var(--bg);border:1px solid var(--border);padding:0.4rem;border-radius:4px;width:100%">
-    </div>
-    <div class="config-field">
-      <label>Or Paste YAML</label>
-      <textarea data-pipeline-target="importYaml" placeholder="receivers:
+  <!-- Import Modal (INSIDE controller scope) -->
+  <div class="modal-overlay" data-pipeline-target="importModal">
+    <div class="modal" style="max-width:600px">
+      <h3 style="color:var(--purple)">📥 Import OTel Collector Config</h3>
+      <p style="color:var(--text-dim);font-size:0.8rem;margin-bottom:0.75rem">Paste an existing OpenTelemetry Collector YAML config or upload a file to populate the visual builder.</p>
+      <div class="config-field">
+        <label>Upload File</label>
+        <input type="file" accept=".yaml,.yml" data-pipeline-target="importFile" data-action="change->pipeline#handleImportFile"
+               style="font-size:0.8rem;color:var(--text-dim);background:var(--bg);border:1px solid var(--border);padding:0.4rem;border-radius:4px;width:100%">
+      </div>
+      <div class="config-field">
+        <label>Or Paste YAML</label>
+        <textarea data-pipeline-target="importYaml" placeholder="receivers:
   otlp:
     protocols:
       grpc:
@@ -361,11 +363,54 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [debug]" style="height:220px;font-family:'Source Code Pro',monospace;font-size:0.75rem;resize:vertical"></textarea>
-    </div>
-    <div data-pipeline-target="importError" style="color:var(--red);font-size:0.8rem;min-height:1.2rem;margin-bottom:0.5rem"></div>
-    <div class="modal-actions">
-      <button class="btn" data-action="click->pipeline#closeImportModal">Cancel</button>
-      <button class="btn btn-purple" data-action="click->pipeline#importConfig">Parse & Load</button>
+      </div>
+      <div data-pipeline-target="importError" style="color:var(--red);font-size:0.8rem;min-height:1.2rem;margin-bottom:0.5rem"></div>
+      <div class="modal-actions">
+        <button class="btn" data-action="click->pipeline#closeImportModal">Cancel</button>
+        <button class="btn btn-purple" data-action="click->pipeline#importConfig">Parse & Load</button>
+      </div>
     </div>
   </div>
+
+  <!-- Save to Community Modal (INSIDE controller scope) -->
+  <div class="modal-overlay" data-pipeline-target="communityModal">
+    <div class="modal" style="max-width:550px">
+      <h3 style="color:var(--green)">🌐 Save to Community Gallery</h3>
+      <p style="color:var(--text-dim);font-size:0.8rem;margin-bottom:0.75rem">Share your pipeline config with the community. It will appear in the <a href="/configs" style="color:var(--cyan)">Community Gallery</a>.</p>
+      <div class="config-field">
+        <label>Name <span style="color:var(--red)">*</span></label>
+        <input type="text" data-pipeline-target="communityName" placeholder="e.g. Production K8s Monitoring Stack">
+      </div>
+      <div class="config-field">
+        <label>Description</label>
+        <textarea data-pipeline-target="communityDescription" placeholder="Describe what this config does, what it's good for..." style="height:80px;resize:vertical"></textarea>
+      </div>
+      <div class="config-field">
+        <label>Tags</label>
+        <div class="save-tags" data-pipeline-target="communityTags">
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="kubernetes"> kubernetes</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="docker"> docker</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="logs"> logs</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="traces"> traces</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="metrics"> metrics</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="production"> production</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="development"> development</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="monitoring"> monitoring</label>
+          <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="alerting"> alerting</label>
+        </div>
+      </div>
+      <div class="config-field">
+        <label>Preview</label>
+        <div class="yaml-output" data-pipeline-target="communityPreview" style="max-height:150px;overflow-y:auto;font-size:0.7rem">
+# Build a pipeline first...
+        </div>
+      </div>
+      <div data-pipeline-target="communityError" style="color:var(--red);font-size:0.8rem;min-height:1.2rem;margin-bottom:0.5rem"></div>
+      <div class="modal-actions">
+        <button class="btn" data-action="click->pipeline#closeCommunityModal">Cancel</button>
+        <button class="btn btn-green" data-action="click->pipeline#saveToCommunity">🌐 Publish to Gallery</button>
+      </div>
+    </div>
+  </div>
+
 </div>

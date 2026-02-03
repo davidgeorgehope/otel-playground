@@ -374,8 +374,10 @@ export default class extends Controller {
     "receiversDrop", "processorsDrop", "exportersDrop",
     "tracesCount", "metricsCount", "logsCount",
     "configPanel", "yamlPanel", "noSelection", "configFields",
-    "yamlOutput", "deployPanel", "instrumentPanel", "saveModal", "saveName", "saveDescription", "saveTags",
-    "importModal", "importYaml", "importError", "importFile"
+    "yamlOutput", "deployPanel", "instrumentPanel",
+    "saveModal", "saveName", "saveDescription", "saveTags",
+    "importModal", "importYaml", "importError", "importFile",
+    "communityModal", "communityName", "communityDescription", "communityTags", "communityPreview", "communityError"
   ]
 
   static values = { template: String, loadConfig: String }
@@ -980,7 +982,6 @@ export default class extends Controller {
       ;(pipeline.receivers || []).forEach(comp => {
         const id = comp.id || comp.type
         if (comp.isConnector) {
-          // Connector as receiver - just add name to pipeline, don't add to receivers section
           recNames.push(id)
         } else {
           receiversYaml[id] = this.cleanSettings(comp.settings)
@@ -995,7 +996,6 @@ export default class extends Controller {
       ;(pipeline.exporters || []).forEach(comp => {
         const id = comp.id || comp.type
         if (comp.isConnector) {
-          // Connector as exporter - just add name to pipeline, don't add to exporters section
           expNames.push(id)
         } else {
           exportersYaml[id] = this.cleanSettings(comp.settings)
@@ -1049,7 +1049,6 @@ export default class extends Controller {
       if (settings.namespace) result.namespace = settings.namespace
       return result
     }
-    // count and other connectors
     return this.cleanSettings(settings)
   }
 
@@ -1186,12 +1185,10 @@ export default class extends Controller {
 
   // Clear pipeline
   clearPipeline() {
-    // Also clear connectors that involve this pipeline
     const pt = this.currentPipelineType
     Object.keys(this.connectorConfigs).forEach(id => {
       const cc = this.connectorConfigs[id]
       if (cc.from === pt || cc.to === pt) {
-        // Remove from ALL pipelines
         Object.keys(this.pipelines).forEach(p => {
           this.pipelines[p].exporters = this.pipelines[p].exporters.filter(c => !(c.isConnector && c.id === id))
           this.pipelines[p].receivers = this.pipelines[p].receivers.filter(c => !(c.isConnector && c.id === id))
@@ -1207,7 +1204,7 @@ export default class extends Controller {
     this.generateYaml()
   }
 
-  // Save modal
+  // ===== Save Config Modal =====
   openSaveModal() {
     this.saveModalTarget.classList.add("active")
   }
@@ -1262,18 +1259,14 @@ export default class extends Controller {
     })
   }
 
-  // Import modal
+  // ===== Import Modal =====
   openImportModal() {
-    if (this.hasImportModalTarget) {
-      this.importModalTarget.classList.add("active")
-      if (this.hasImportErrorTarget) this.importErrorTarget.textContent = ""
-    }
+    this.importModalTarget.classList.add("active")
+    if (this.hasImportErrorTarget) this.importErrorTarget.textContent = ""
   }
 
   closeImportModal() {
-    if (this.hasImportModalTarget) {
-      this.importModalTarget.classList.remove("active")
-    }
+    this.importModalTarget.classList.remove("active")
   }
 
   handleImportFile(event) {
@@ -1290,8 +1283,6 @@ export default class extends Controller {
   }
 
   importConfig() {
-    if (!this.hasImportYamlTarget) return
-
     const yamlText = this.importYamlTarget.value.trim()
     if (!yamlText) {
       if (this.hasImportErrorTarget) this.importErrorTarget.textContent = "Please paste a YAML config or upload a file"
@@ -1342,15 +1333,12 @@ export default class extends Controller {
         // Receivers
         ;(sp.receivers || []).forEach(name => {
           if (connectorNames.has(name)) {
-            // This is a connector acting as receiver
             this.pipelines[pipelineType].receivers.push({
               type: name, id: name, isConnector: true, settings: {}
             })
           } else {
             const settings = (parsed.receivers && parsed.receivers[name]) ? JSON.parse(JSON.stringify(parsed.receivers[name])) : {}
-            // Try to match with known defaults
             const baseName = name.split("/")[0]
-            const defaults = COMPONENT_DEFAULTS.receivers[baseName]
             this.pipelines[pipelineType].receivers.push({
               type: baseName, id: name, settings: settings
             })
@@ -1371,7 +1359,6 @@ export default class extends Controller {
         // Exporters
         ;(sp.exporters || []).forEach(name => {
           if (connectorNames.has(name)) {
-            // This is a connector acting as exporter
             this.pipelines[pipelineType].exporters.push({
               type: name, id: name, isConnector: true, settings: {}
             })
@@ -1386,7 +1373,7 @@ export default class extends Controller {
         })
       })
 
-      // Build connector configs by finding their from/to pipelines
+      // Build connector configs
       connectorNames.forEach(name => {
         let fromPipeline = null
         let toPipeline = null
@@ -1397,7 +1384,6 @@ export default class extends Controller {
         })
 
         const connSettings = parsed.connectors[name] || {}
-        // Convert structured settings to our internal format for known types
         const baseName = name.split("/")[0]
         let internalSettings = {}
 
@@ -1423,7 +1409,6 @@ export default class extends Controller {
 
       // If no service.pipelines, try to infer from top-level sections
       if (Object.keys(servicePipelines).length === 0) {
-        // Add all receivers/processors/exporters to traces pipeline as fallback
         if (parsed.receivers) {
           Object.keys(parsed.receivers).forEach(name => {
             if (connectorNames.has(name)) return
@@ -1475,6 +1460,106 @@ export default class extends Controller {
         this.importErrorTarget.textContent = `Parse error: ${e.message}`
       }
     }
+  }
+
+  // ===== Community Gallery Modal =====
+  openCommunityModal() {
+    // Check if pipeline has content
+    let hasContent = false
+    Object.keys(this.pipelines).forEach(pt => {
+      const p = this.pipelines[pt]
+      if ((p.receivers?.length || 0) + (p.processors?.length || 0) + (p.exporters?.length || 0) > 0) {
+        hasContent = true
+      }
+    })
+
+    if (!hasContent) {
+      this.showFeedback("⚠ Add components to your pipeline first", "var(--amber)")
+      return
+    }
+
+    // Generate preview YAML
+    this.generateYaml()
+    if (this.hasCommunityPreviewTarget) {
+      this.communityPreviewTarget.textContent = this.yamlOutputTarget.textContent
+    }
+    if (this.hasCommunityErrorTarget) {
+      this.communityErrorTarget.textContent = ""
+    }
+
+    this.communityModalTarget.classList.add("active")
+  }
+
+  closeCommunityModal() {
+    this.communityModalTarget.classList.remove("active")
+  }
+
+  saveToCommunity() {
+    const name = this.communityNameTarget.value.trim()
+    if (!name) {
+      this.communityNameTarget.style.borderColor = "var(--red)"
+      this.communityNameTarget.focus()
+      if (this.hasCommunityErrorTarget) this.communityErrorTarget.textContent = "Name is required"
+      setTimeout(() => { this.communityNameTarget.style.borderColor = "" }, 2000)
+      return
+    }
+
+    const description = this.communityDescriptionTarget.value.trim()
+    const pipelineData = JSON.stringify({ pipelines: this.pipelines, connectorConfigs: this.connectorConfigs })
+
+    // Generate fresh YAML
+    this.generateYaml()
+    const yamlOutput = this.yamlOutputTarget.textContent
+
+    const tags = []
+    if (this.hasCommunityTagsTarget) {
+      this.communityTagsTarget.querySelectorAll("input:checked").forEach(cb => tags.push(cb.value))
+    }
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
+
+    // Disable button during save
+    const submitBtn = this.communityModalTarget.querySelector(".btn-green")
+    if (submitBtn) {
+      submitBtn.disabled = true
+      submitBtn.textContent = "Publishing..."
+    }
+
+    fetch("/configs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+        "Accept": "application/json"
+      },
+      body: JSON.stringify({
+        config: {
+          name: name,
+          description: description,
+          pipeline_data: pipelineData,
+          yaml_output: yamlOutput,
+          tags: JSON.stringify(tags)
+        }
+      })
+    }).then(response => {
+      if (response.ok) return response.json()
+      throw new Error("Save failed")
+    }).then(data => {
+      this.closeCommunityModal()
+      this.showFeedback(`✓ Published to Community Gallery!`, "var(--green)")
+      // Redirect to the gallery after a short delay
+      setTimeout(() => {
+        window.location.href = `/configs/${data.share_token}`
+      }, 1000)
+    }).catch(err => {
+      if (this.hasCommunityErrorTarget) {
+        this.communityErrorTarget.textContent = "Failed to publish. Please try again."
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false
+        submitBtn.textContent = "🌐 Publish to Gallery"
+      }
+    })
   }
 
   showFeedback(message, color) {
