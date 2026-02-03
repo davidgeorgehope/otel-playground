@@ -11,6 +11,7 @@
       ▸ Logs <span class="tab-count" data-pipeline-target="logsCount">0</span>
     </button>
     <div style="flex:1"></div>
+    <button class="btn btn-purple btn-sm" style="margin:0.3rem 0" data-action="click->pipeline#openImportModal">📥 Import</button>
     <button class="btn btn-amber btn-sm" style="margin:0.3rem 0" data-sim-btn data-action="click->simulation#start">▶ Simulate</button>
     <button class="btn btn-green btn-sm" style="margin:0.3rem 0" data-action="click->pipeline#openSaveModal">
       ⬆ Save Config
@@ -132,14 +133,16 @@
     </div>
 
     <div class="palette-section">
-      <div class="palette-section-title">⬤ Connectors</div>
+      <div class="palette-section-title" style="color:var(--purple)">⬡ Connectors</div>
       <div class="palette-item" draggable="true" data-category="connectors" data-component="spanmetrics"
            data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
         <span class="dot"></span> spanmetrics
+        <span style="font-size:0.55rem;color:var(--purple);opacity:0.7;margin-left:auto">traces→metrics</span>
       </div>
       <div class="palette-item" draggable="true" data-category="connectors" data-component="count"
            data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
         <span class="dot"></span> count
+        <span style="font-size:0.55rem;color:var(--purple);opacity:0.7;margin-left:auto">any→metrics</span>
       </div>
     </div>
   </div>
@@ -325,6 +328,44 @@
     <div class="modal-actions">
       <button class="btn" data-action="click->pipeline#closeSaveModal">Cancel</button>
       <button class="btn btn-green" data-action="click->pipeline#saveConfig">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal-overlay" data-pipeline-target="importModal">
+  <div class="modal" style="max-width:600px">
+    <h3 style="color:var(--purple)">📥 Import OTel Collector Config</h3>
+    <p style="color:var(--text-dim);font-size:0.8rem;margin-bottom:0.75rem">Paste an existing OpenTelemetry Collector YAML config or upload a file to populate the visual builder.</p>
+    <div class="config-field">
+      <label>Upload File</label>
+      <input type="file" accept=".yaml,.yml" data-pipeline-target="importFile" data-action="change->pipeline#handleImportFile"
+             style="font-size:0.8rem;color:var(--text-dim);background:var(--bg);border:1px solid var(--border);padding:0.4rem;border-radius:4px;width:100%">
+    </div>
+    <div class="config-field">
+      <label>Or Paste YAML</label>
+      <textarea data-pipeline-target="importYaml" placeholder="receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+processors:
+  batch:
+    timeout: 200ms
+exporters:
+  debug:
+    verbosity: basic
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]" style="height:220px;font-family:'Source Code Pro',monospace;font-size:0.75rem;resize:vertical"></textarea>
+    </div>
+    <div data-pipeline-target="importError" style="color:var(--red);font-size:0.8rem;min-height:1.2rem;margin-bottom:0.5rem"></div>
+    <div class="modal-actions">
+      <button class="btn" data-action="click->pipeline#closeImportModal">Cancel</button>
+      <button class="btn btn-purple" data-action="click->pipeline#importConfig">Parse & Load</button>
     </div>
   </div>
 </div>

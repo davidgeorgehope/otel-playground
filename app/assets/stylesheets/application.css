@@ -1532,3 +1532,13 @@ body {
   color: var(--cyan);
   background: rgba(0, 255, 255, 0.05);
 }
+
+/* Purple button for connectors and import */
+.btn-purple {
+  border-color: var(--purple-dim);
+  color: var(--purple);
+}
+.btn-purple:hover {
+  background: rgba(170, 85, 255, 0.12);
+  border-color: var(--purple);
+}

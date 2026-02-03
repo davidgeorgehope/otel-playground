@@ -87,6 +87,15 @@ const COMPONENT_DEFAULTS = {
         { key: "protocols.grpc.endpoint", label: "gRPC Endpoint", type: "text", default: "0.0.0.0:14250" },
         { key: "protocols.thrift_http.endpoint", label: "Thrift HTTP Endpoint", type: "text", default: "0.0.0.0:14268" }
       ]
+    },
+    windowseventlog: {
+      label: "Windows Event Log Receiver",
+      settings: {
+        channel: "Application"
+      },
+      fields: [
+        { key: "channel", label: "Channel", type: "select", default: "Application", options: ["Application", "System", "Security", "Setup", "ForwardedEvents"] }
+      ]
     }
   },
   processors: {
@@ -236,13 +245,23 @@ const COMPONENT_DEFAULTS = {
   connectors: {
     spanmetrics: {
       label: "Span Metrics Connector",
-      settings: { histogram: { explicit: { buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000] } } },
+      route: { from: "traces", to: "metrics" },
+      routeLabel: "traces → metrics",
+      settings: {
+        _dimensions: "http.method,http.status_code",
+        _buckets: "2,6,10,100,250,500,1000,5000,10000",
+        namespace: ""
+      },
       fields: [
-        { key: "histogram.explicit.buckets", label: "Histogram Buckets", type: "text", default: "1,5,10,25,50,100,250,500,1000" }
+        { key: "_dimensions", label: "Dimensions (comma-sep)", type: "text", default: "http.method,http.status_code" },
+        { key: "_buckets", label: "Histogram Buckets (comma-sep)", type: "text", default: "2,6,10,100,250,500,1000,5000,10000" },
+        { key: "namespace", label: "Namespace", type: "text", default: "" }
       ]
     },
     count: {
       label: "Count Connector",
+      route: { from: null, to: "metrics" },
+      routeLabel: "any → metrics",
       settings: {},
       fields: []
     }
@@ -327,6 +346,26 @@ const TEMPLATES = {
         exporters: [{ type: "otlp", id: "otlp", settings: { endpoint: "loki:4317", tls: { insecure: true } } }]
       }
     }
+  },
+  windowseventlogs: {
+    pipelines: {
+      logs: {
+        receivers: [
+          { type: "windowseventlog", id: "windowseventlog/application", settings: { channel: "Application" } },
+          { type: "windowseventlog", id: "windowseventlog/system", settings: { channel: "System" } },
+          { type: "windowseventlog", id: "windowseventlog/security", settings: { channel: "Security" } }
+        ],
+        processors: [
+          { type: "resource", id: "resource", settings: { attributes: [{ key: "service.name", value: "windows-events", action: "upsert" }, { key: "deployment.environment", value: "production", action: "upsert" }] } },
+          { type: "transform", id: "transform/logs-streams", settings: { log_statements: [{ context: "resource", statements: ["set(attributes[\"elasticsearch.index\"], \"logs\")"] }] } },
+          { type: "batch", id: "batch", settings: { timeout: "1s", send_batch_size: 1024 } }
+        ],
+        exporters: [
+          { type: "otlp", id: "otlp/elastic", settings: { endpoint: "https://your-cluster.ingest.elastic.cloud:443", headers: { Authorization: "ApiKey YOUR_API_KEY_HERE" } } },
+          { type: "debug", id: "debug", settings: { verbosity: "basic" } }
+        ]
+      }
+    }
   }
 }
 
@@ -335,14 +374,20 @@ export default class extends Controller {
     "receiversDrop", "processorsDrop", "exportersDrop",
     "tracesCount", "metricsCount", "logsCount",
     "configPanel", "yamlPanel", "noSelection", "configFields",
-    "yamlOutput", "deployPanel", "instrumentPanel", "saveModal", "saveName", "saveDescription", "saveTags"
+    "yamlOutput", "deployPanel", "instrumentPanel", "saveModal", "saveName", "saveDescription", "saveTags",
+    "importModal", "importYaml", "importError", "importFile"
   ]
 
   static values = { template: String, loadConfig: String }
 
   connect() {
     this.currentPipelineType = "traces"
-    this.pipelines = { traces: { receivers: [], processors: [], exporters: [] }, metrics: { receivers: [], processors: [], exporters: [] }, logs: { receivers: [], processors: [], exporters: [] } }
+    this.pipelines = {
+      traces: { receivers: [], processors: [], exporters: [] },
+      metrics: { receivers: [], processors: [], exporters: [] },
+      logs: { receivers: [], processors: [], exporters: [] }
+    }
+    this.connectorConfigs = {} // { id: { type, settings } }
     this.selectedComponent = null
     this.dragData = null
 
@@ -359,7 +404,25 @@ export default class extends Controller {
       } catch(e) {}
     }
 
+    // Auto-select the first non-empty pipeline tab
+    this.autoSelectTab()
     this.render()
+  }
+
+  autoSelectTab() {
+    for (const type of ["traces", "metrics", "logs"]) {
+      const p = this.pipelines[type]
+      const count = (p.receivers?.length || 0) + (p.processors?.length || 0) + (p.exporters?.length || 0)
+      if (count > 0) {
+        this.currentPipelineType = type
+        // Update tab UI
+        document.querySelectorAll(".pipeline-tab").forEach(tab => {
+          const tabType = tab.dataset?.pipelineTypeParam
+          if (tabType) tab.classList.toggle("active", tabType === type)
+        })
+        return
+      }
+    }
   }
 
   loadTemplate(template) {
@@ -375,6 +438,11 @@ export default class extends Controller {
         }
       })
     })
+
+    // Load connector configs if present
+    if (template.connectorConfigs) {
+      this.connectorConfigs = JSON.parse(JSON.stringify(template.connectorConfigs))
+    }
   }
 
   // Drag and drop
@@ -414,8 +482,14 @@ export default class extends Controller {
     if (!data) return
 
     const dropCategory = event.currentTarget.dataset.dropCategory
-    if (data.category !== dropCategory) return
 
+    // Allow connectors to be dropped on exporters zone
+    if (data.category === "connectors") {
+      this.addConnector(data.component)
+      return
+    }
+
+    if (data.category !== dropCategory) return
     this.addComponentToPipeline(data.category, data.component)
   }
 
@@ -424,7 +498,65 @@ export default class extends Controller {
     const item = event.currentTarget
     const category = item.dataset.category
     const component = item.dataset.component
+
+    if (category === "connectors") {
+      this.addConnector(component)
+      return
+    }
+
     this.addComponentToPipeline(category, component)
+  }
+
+  addConnector(connectorType) {
+    const def = COMPONENT_DEFAULTS.connectors[connectorType]
+    if (!def) return
+
+    // Check if this connector already exists
+    if (this.connectorConfigs[connectorType]) {
+      this.showFeedback("⚠ Connector already added", "var(--amber)")
+      return
+    }
+
+    const route = def.route
+    const fromPipeline = route.from || this.currentPipelineType
+    const toPipeline = route.to
+
+    if (fromPipeline === toPipeline) {
+      this.showFeedback("⚠ Connector source and target can't be the same pipeline", "var(--red)")
+      return
+    }
+
+    const id = connectorType
+    const settings = JSON.parse(JSON.stringify(def.settings))
+
+    // Store connector config centrally
+    this.connectorConfigs[id] = { type: connectorType, settings, from: fromPipeline, to: toPipeline }
+
+    // Add as exporter in source pipeline
+    this.pipelines[fromPipeline].exporters.push({
+      type: connectorType, id, isConnector: true, settings: {}
+    })
+
+    // Add as receiver in target pipeline
+    this.pipelines[toPipeline].receivers.push({
+      type: connectorType, id, isConnector: true, settings: {}
+    })
+
+    // Switch to source pipeline tab to show the connector
+    this.currentPipelineType = fromPipeline
+    document.querySelectorAll(".pipeline-tab").forEach(tab => {
+      const tabType = tab.dataset?.pipelineTypeParam
+      if (tabType) tab.classList.toggle("active", tabType === fromPipeline)
+    })
+
+    this.showFeedback(`✓ Added ${connectorType} connector: ${fromPipeline} → ${toPipeline}`, "var(--purple)")
+    this.render()
+    this.generateYaml()
+
+    // Notify tutorial
+    document.dispatchEvent(new CustomEvent("tutorial:component-added", {
+      detail: { category: "connectors", component: connectorType }
+    }))
   }
 
   addComponentToPipeline(category, componentType) {
@@ -435,7 +567,7 @@ export default class extends Controller {
     const settings = defaults ? JSON.parse(JSON.stringify(defaults.settings)) : {}
 
     // Generate unique ID
-    const existing = pipeline[category].filter(c => c.type === componentType)
+    const existing = pipeline[category].filter(c => c.type === componentType && !c.isConnector)
     const id = existing.length > 0 ? `${componentType}/${existing.length + 1}` : componentType
 
     pipeline[category].push({
@@ -458,7 +590,19 @@ export default class extends Controller {
     const category = event.currentTarget.dataset.category
     const index = parseInt(event.currentTarget.dataset.index)
 
-    this.pipelines[this.currentPipelineType][category].splice(index, 1)
+    const comp = this.pipelines[this.currentPipelineType][category][index]
+
+    // If removing a connector, remove from both pipelines
+    if (comp && comp.isConnector) {
+      const connId = comp.id
+      Object.keys(this.pipelines).forEach(pt => {
+        this.pipelines[pt].exporters = this.pipelines[pt].exporters.filter(c => !(c.isConnector && c.id === connId))
+        this.pipelines[pt].receivers = this.pipelines[pt].receivers.filter(c => !(c.isConnector && c.id === connId))
+      })
+      delete this.connectorConfigs[connId]
+    } else {
+      this.pipelines[this.currentPipelineType][category].splice(index, 1)
+    }
 
     if (this.selectedComponent &&
         this.selectedComponent.category === category &&
@@ -533,9 +677,14 @@ export default class extends Controller {
       container.classList.toggle("empty", items.length === 0)
 
       items.forEach((comp, index) => {
-        const categoryClass = category === "receivers" ? "receiver" :
-                              category === "processors" ? "processor" :
-                              category === "exporters" ? "exporter" : "connector"
+        let categoryClass
+        if (comp.isConnector) {
+          categoryClass = "connector"
+        } else {
+          categoryClass = category === "receivers" ? "receiver" :
+                          category === "processors" ? "processor" : "exporter"
+        }
+
         const isSelected = this.selectedComponent &&
                            this.selectedComponent.category === category &&
                            this.selectedComponent.index === index
@@ -545,8 +694,18 @@ export default class extends Controller {
         div.dataset.category = category
         div.dataset.index = index
         div.dataset.action = "click->pipeline#selectComponent"
+
+        let label = comp.type
+        if (comp.isConnector) {
+          const cc = this.connectorConfigs[comp.id]
+          if (cc) {
+            const arrow = category === "exporters" ? `→ ${cc.to}` : `← ${cc.from}`
+            label = `${comp.type} <span style="font-size:0.6rem;opacity:0.7">${arrow}</span>`
+          }
+        }
+
         div.innerHTML = `
-          <span>${comp.type}</span>
+          <span>${label}</span>
           <button class="comp-remove" data-category="${category}" data-index="${index}" data-action="click->pipeline#removeComponent">✕</button>
         `
         container.appendChild(div)
@@ -565,8 +724,41 @@ export default class extends Controller {
       if (target) target.textContent = count
     })
 
+    // Render connector bridge indicators
+    this.renderConnectorBridges()
+
     // Dispatch for validation controller
     this.element.dispatchEvent(new CustomEvent('pipeline:changed', { detail: this.pipelines }))
+  }
+
+  renderConnectorBridges() {
+    // Remove existing bridge indicators
+    document.querySelectorAll(".connector-bridge").forEach(el => el.remove())
+
+    const connKeys = Object.keys(this.connectorConfigs)
+    if (connKeys.length === 0) return
+
+    const canvas = this.element.querySelector(".pipeline-canvas")
+    if (!canvas) return
+
+    let bridgeContainer = canvas.querySelector(".connector-bridges")
+    if (!bridgeContainer) {
+      bridgeContainer = document.createElement("div")
+      bridgeContainer.className = "connector-bridges"
+      bridgeContainer.style.cssText = "padding:0.3rem 0.5rem;display:flex;gap:0.5rem;flex-wrap:wrap"
+      const flow = canvas.querySelector(".pipeline-flow")
+      if (flow) flow.after(bridgeContainer)
+    }
+    bridgeContainer.innerHTML = ""
+
+    connKeys.forEach(id => {
+      const cc = this.connectorConfigs[id]
+      const badge = document.createElement("span")
+      badge.className = "connector-bridge"
+      badge.style.cssText = "font-size:0.7rem;color:var(--purple);border:1px solid var(--purple-dim);padding:0.15rem 0.5rem;border-radius:3px;background:rgba(170,85,255,0.08)"
+      badge.textContent = `⬡ ${cc.type}: ${cc.from} → ${cc.to}`
+      bridgeContainer.appendChild(badge)
+    })
   }
 
   // Render component config panel
@@ -576,6 +768,11 @@ export default class extends Controller {
     const { category, index } = this.selectedComponent
     const comp = this.pipelines[this.currentPipelineType][category]?.[index]
     if (!comp) return this.showNoSelection()
+
+    // Handle connectors
+    if (comp.isConnector) {
+      return this.renderConnectorConfigPanel(comp)
+    }
 
     const defaults = COMPONENT_DEFAULTS[category]?.[comp.type]
     if (!defaults) {
@@ -594,44 +791,76 @@ export default class extends Controller {
 
     defaults.fields.forEach(field => {
       const currentValue = this.getNestedValue(comp.settings, field.key) ?? field.default
-      html += `<div class="config-field">`
-      html += `<label>${field.label}</label>`
-
-      if (field.type === "text") {
-        html += `<input type="text" value="${this.escapeHtml(String(currentValue))}" data-field-key="${field.key}" data-action="input->pipeline#updateField">`
-      } else if (field.type === "number") {
-        html += `<input type="number" value="${currentValue}" data-field-key="${field.key}" data-action="input->pipeline#updateField">`
-      } else if (field.type === "select") {
-        html += `<select data-field-key="${field.key}" data-action="change->pipeline#updateField">`
-        field.options.forEach(opt => {
-          html += `<option value="${opt}"${String(currentValue) === opt ? " selected" : ""}>${opt}</option>`
-        })
-        html += `</select>`
-      } else if (field.type === "toggle") {
-        const checked = currentValue === true || currentValue === "true" || (typeof currentValue === "object" && currentValue !== null)
-        html += `<div class="toggle-row">
-          <label class="toggle-switch">
-            <input type="checkbox" ${checked ? "checked" : ""} data-field-key="${field.key}" data-action="change->pipeline#updateToggle">
-            <span class="slider"></span>
-          </label>
-          <span style="color:var(--text-dim);font-size:0.8rem">${checked ? "Enabled" : "Disabled"}</span>
-        </div>`
-      }
-
-      html += `</div>`
+      html += this.renderField(field, currentValue)
     })
 
     this.configFieldsTarget.innerHTML = html
+  }
+
+  renderConnectorConfigPanel(comp) {
+    const cc = this.connectorConfigs[comp.id]
+    if (!cc) return this.showNoSelection()
+
+    const defaults = COMPONENT_DEFAULTS.connectors[cc.type]
+    if (!defaults) return this.showNoSelection()
+
+    this.noSelectionTarget.style.display = "none"
+    this.configFieldsTarget.style.display = "block"
+
+    let html = `<h4 style="color:var(--purple);margin-bottom:0.5rem;font-size:0.9rem">⬡ ${defaults.label}</h4>`
+    html += `<div style="color:var(--purple);font-size:0.75rem;margin-bottom:0.5rem;opacity:0.8">${defaults.routeLabel}</div>`
+    html += `<div style="color:var(--text-dim);font-size:0.75rem;margin-bottom:0.75rem">ID: ${comp.id} — appears as exporter in ${cc.from} and receiver in ${cc.to}</div>`
+
+    defaults.fields.forEach(field => {
+      const currentValue = this.getNestedValue(cc.settings, field.key) ?? field.default
+      html += this.renderField(field, currentValue, true)
+    })
+
+    this.configFieldsTarget.innerHTML = html
+  }
+
+  renderField(field, currentValue, isConnector = false) {
+    const action = isConnector ? "input->pipeline#updateConnectorField" : "input->pipeline#updateField"
+    const changeAction = isConnector ? "change->pipeline#updateConnectorField" : "change->pipeline#updateField"
+    const toggleAction = isConnector ? "change->pipeline#updateConnectorToggle" : "change->pipeline#updateToggle"
+
+    let html = `<div class="config-field">`
+    html += `<label>${field.label}</label>`
+
+    if (field.type === "text") {
+      html += `<input type="text" value="${this.escapeHtml(String(currentValue))}" data-field-key="${field.key}" data-action="${action}">`
+    } else if (field.type === "number") {
+      html += `<input type="number" value="${currentValue}" data-field-key="${field.key}" data-action="${action}">`
+    } else if (field.type === "select") {
+      html += `<select data-field-key="${field.key}" data-action="${changeAction}">`
+      field.options.forEach(opt => {
+        html += `<option value="${opt}"${String(currentValue) === opt ? " selected" : ""}>${opt}</option>`
+      })
+      html += `</select>`
+    } else if (field.type === "toggle") {
+      const checked = currentValue === true || currentValue === "true" || (typeof currentValue === "object" && currentValue !== null)
+      html += `<div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" ${checked ? "checked" : ""} data-field-key="${field.key}" data-action="${toggleAction}">
+          <span class="slider"></span>
+        </label>
+        <span style="color:var(--text-dim);font-size:0.8rem">${checked ? "Enabled" : "Disabled"}</span>
+      </div>`
+    }
+
+    html += `</div>`
+    return html
   }
 
   updateField(event) {
     if (!this.selectedComponent) return
     const { category, index } = this.selectedComponent
     const comp = this.pipelines[this.currentPipelineType][category][index]
+    if (comp.isConnector) return this.updateConnectorField(event)
+
     const key = event.currentTarget.dataset.fieldKey
     let value = event.currentTarget.value
 
-    // Convert numbers
     if (event.currentTarget.type === "number" && value !== "") {
       value = Number(value)
     }
@@ -640,14 +869,35 @@ export default class extends Controller {
     this.generateYaml()
   }
 
+  updateConnectorField(event) {
+    if (!this.selectedComponent) return
+    const { category, index } = this.selectedComponent
+    const comp = this.pipelines[this.currentPipelineType][category][index]
+    if (!comp.isConnector) return
+
+    const cc = this.connectorConfigs[comp.id]
+    if (!cc) return
+
+    const key = event.currentTarget.dataset.fieldKey
+    let value = event.currentTarget.value
+
+    if (event.currentTarget.type === "number" && value !== "") {
+      value = Number(value)
+    }
+
+    this.setNestedValue(cc.settings, key, value)
+    this.generateYaml()
+  }
+
   updateToggle(event) {
     if (!this.selectedComponent) return
     const { category, index } = this.selectedComponent
     const comp = this.pipelines[this.currentPipelineType][category][index]
+    if (comp.isConnector) return this.updateConnectorToggle(event)
+
     const key = event.currentTarget.dataset.fieldKey
     const checked = event.currentTarget.checked
 
-    // For scrapers, set to empty object if enabled, delete if disabled
     if (key.startsWith("scrapers.")) {
       const scraper = key.split(".")[1]
       if (checked) {
@@ -660,7 +910,25 @@ export default class extends Controller {
       this.setNestedValue(comp.settings, key, checked)
     }
 
-    // Update label
+    const label = event.currentTarget.closest(".toggle-row").querySelector("span:last-child")
+    if (label) label.textContent = checked ? "Enabled" : "Disabled"
+
+    this.generateYaml()
+  }
+
+  updateConnectorToggle(event) {
+    if (!this.selectedComponent) return
+    const { category, index } = this.selectedComponent
+    const comp = this.pipelines[this.currentPipelineType][category][index]
+    if (!comp.isConnector) return
+
+    const cc = this.connectorConfigs[comp.id]
+    if (!cc) return
+
+    const key = event.currentTarget.dataset.fieldKey
+    const checked = event.currentTarget.checked
+    this.setNestedValue(cc.settings, key, checked)
+
     const label = event.currentTarget.closest(".toggle-row").querySelector("span:last-child")
     if (label) label.textContent = checked ? "Enabled" : "Disabled"
 
@@ -686,7 +954,6 @@ export default class extends Controller {
       return
     }
 
-    // Generate YAML client-side for instant feedback
     this.yamlOutputTarget.textContent = this.buildYaml(data)
   }
 
@@ -695,18 +962,30 @@ export default class extends Controller {
     let receiversYaml = {}
     let processorsYaml = {}
     let exportersYaml = {}
+    let connectorsYaml = {}
     let servicePipelines = {}
+
+    // Collect connector configs for YAML
+    Object.keys(this.connectorConfigs).forEach(id => {
+      const cc = this.connectorConfigs[id]
+      connectorsYaml[id] = this.buildConnectorSettings(cc.type, cc.settings)
+    })
 
     Object.keys(pipelines).forEach(pipelineType => {
       const pipeline = pipelines[pipelineType]
-      const recNames = [];
-      const procNames = [];
-      const expNames = [];
+      const recNames = []
+      const procNames = []
+      const expNames = []
 
       ;(pipeline.receivers || []).forEach(comp => {
         const id = comp.id || comp.type
-        receiversYaml[id] = this.cleanSettings(comp.settings)
-        recNames.push(id)
+        if (comp.isConnector) {
+          // Connector as receiver - just add name to pipeline, don't add to receivers section
+          recNames.push(id)
+        } else {
+          receiversYaml[id] = this.cleanSettings(comp.settings)
+          recNames.push(id)
+        }
       })
       ;(pipeline.processors || []).forEach(comp => {
         const id = comp.id || comp.type
@@ -715,8 +994,13 @@ export default class extends Controller {
       })
       ;(pipeline.exporters || []).forEach(comp => {
         const id = comp.id || comp.type
-        exportersYaml[id] = this.cleanSettings(comp.settings)
-        expNames.push(id)
+        if (comp.isConnector) {
+          // Connector as exporter - just add name to pipeline, don't add to exporters section
+          expNames.push(id)
+        } else {
+          exportersYaml[id] = this.cleanSettings(comp.settings)
+          expNames.push(id)
+        }
       })
 
       servicePipelines[pipelineType] = {}
@@ -735,6 +1019,9 @@ export default class extends Controller {
     if (Object.keys(exportersYaml).length) {
       yaml += this.renderYamlSection("exporters", exportersYaml)
     }
+    if (Object.keys(connectorsYaml).length) {
+      yaml += this.renderYamlSection("connectors", connectorsYaml)
+    }
 
     yaml += "\nservice:\n  pipelines:\n"
     Object.keys(servicePipelines).forEach(pType => {
@@ -746,6 +1033,24 @@ export default class extends Controller {
     })
 
     return yaml
+  }
+
+  buildConnectorSettings(connectorType, settings) {
+    if (connectorType === "spanmetrics") {
+      const result = {}
+      if (settings._dimensions) {
+        const dims = settings._dimensions.split(",").map(d => d.trim()).filter(d => d)
+        if (dims.length) result.dimensions = dims.map(d => ({ name: d }))
+      }
+      if (settings._buckets) {
+        const buckets = settings._buckets.split(",").map(b => Number(b.trim())).filter(b => !isNaN(b))
+        if (buckets.length) result.histogram = { explicit: { buckets } }
+      }
+      if (settings.namespace) result.namespace = settings.namespace
+      return result
+    }
+    // count and other connectors
+    return this.cleanSettings(settings)
   }
 
   renderYamlSection(name, items) {
@@ -875,17 +1180,27 @@ export default class extends Controller {
   copyYaml() {
     const yaml = this.yamlOutputTarget.textContent
     navigator.clipboard.writeText(yaml).then(() => {
-      const feedback = document.createElement("div")
-      feedback.className = "copy-feedback"
-      feedback.textContent = "✓ Copied to clipboard"
-      document.body.appendChild(feedback)
-      setTimeout(() => feedback.remove(), 2000)
+      this.showFeedback("✓ Copied to clipboard")
     })
   }
 
   // Clear pipeline
   clearPipeline() {
-    this.pipelines[this.currentPipelineType] = { receivers: [], processors: [], exporters: [] }
+    // Also clear connectors that involve this pipeline
+    const pt = this.currentPipelineType
+    Object.keys(this.connectorConfigs).forEach(id => {
+      const cc = this.connectorConfigs[id]
+      if (cc.from === pt || cc.to === pt) {
+        // Remove from ALL pipelines
+        Object.keys(this.pipelines).forEach(p => {
+          this.pipelines[p].exporters = this.pipelines[p].exporters.filter(c => !(c.isConnector && c.id === id))
+          this.pipelines[p].receivers = this.pipelines[p].receivers.filter(c => !(c.isConnector && c.id === id))
+        })
+        delete this.connectorConfigs[id]
+      }
+    })
+
+    this.pipelines[pt] = { receivers: [], processors: [], exporters: [] }
     this.selectedComponent = null
     this.showNoSelection()
     this.render()
@@ -910,10 +1225,9 @@ export default class extends Controller {
     }
 
     const description = this.saveDescriptionTarget.value.trim()
-    const pipelineData = JSON.stringify({ pipelines: this.pipelines })
+    const pipelineData = JSON.stringify({ pipelines: this.pipelines, connectorConfigs: this.connectorConfigs })
     const yamlOutput = this.yamlOutputTarget.textContent
 
-    // Collect selected tags
     const tags = []
     if (this.hasSaveTagsTarget) {
       this.saveTagsTarget.querySelectorAll("input:checked").forEach(cb => tags.push(cb.value))
@@ -942,20 +1256,237 @@ export default class extends Controller {
       throw new Error("Save failed")
     }).then(data => {
       this.closeSaveModal()
-      const feedback = document.createElement("div")
-      feedback.className = "copy-feedback"
-      feedback.textContent = `✓ Saved! Share: /configs/${data.share_token}`
-      document.body.appendChild(feedback)
-      setTimeout(() => feedback.remove(), 3000)
+      this.showFeedback(`✓ Saved! Share: /configs/${data.share_token}`)
     }).catch(err => {
-      const feedback = document.createElement("div")
-      feedback.className = "copy-feedback"
-      feedback.style.borderColor = "var(--red)"
-      feedback.style.color = "var(--red)"
-      feedback.textContent = "✕ Failed to save"
-      document.body.appendChild(feedback)
-      setTimeout(() => feedback.remove(), 2000)
+      this.showFeedback("✕ Failed to save", "var(--red)")
     })
+  }
+
+  // Import modal
+  openImportModal() {
+    if (this.hasImportModalTarget) {
+      this.importModalTarget.classList.add("active")
+      if (this.hasImportErrorTarget) this.importErrorTarget.textContent = ""
+    }
+  }
+
+  closeImportModal() {
+    if (this.hasImportModalTarget) {
+      this.importModalTarget.classList.remove("active")
+    }
+  }
+
+  handleImportFile(event) {
+    const file = event.currentTarget.files[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      if (this.hasImportYamlTarget) {
+        this.importYamlTarget.value = e.target.result
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  importConfig() {
+    if (!this.hasImportYamlTarget) return
+
+    const yamlText = this.importYamlTarget.value.trim()
+    if (!yamlText) {
+      if (this.hasImportErrorTarget) this.importErrorTarget.textContent = "Please paste a YAML config or upload a file"
+      return
+    }
+
+    // Check if js-yaml is available
+    if (typeof window.jsyaml === "undefined") {
+      if (this.hasImportErrorTarget) this.importErrorTarget.textContent = "YAML parser not loaded. Please refresh the page."
+      return
+    }
+
+    try {
+      const parsed = window.jsyaml.load(yamlText)
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("Invalid YAML: not an object")
+      }
+
+      // Reset pipelines
+      this.pipelines = {
+        traces: { receivers: [], processors: [], exporters: [] },
+        metrics: { receivers: [], processors: [], exporters: [] },
+        logs: { receivers: [], processors: [], exporters: [] }
+      }
+      this.connectorConfigs = {}
+
+      let counts = { receivers: 0, processors: 0, exporters: 0, connectors: 0 }
+
+      // Parse connectors section
+      const connectorNames = new Set()
+      if (parsed.connectors) {
+        Object.keys(parsed.connectors).forEach(name => {
+          connectorNames.add(name)
+          counts.connectors++
+        })
+      }
+
+      // Parse service.pipelines to know what goes where
+      const servicePipelines = parsed.service?.pipelines || {}
+
+      Object.keys(servicePipelines).forEach(pipelineType => {
+        if (!this.pipelines[pipelineType]) {
+          this.pipelines[pipelineType] = { receivers: [], processors: [], exporters: [] }
+        }
+
+        const sp = servicePipelines[pipelineType]
+
+        // Receivers
+        ;(sp.receivers || []).forEach(name => {
+          if (connectorNames.has(name)) {
+            // This is a connector acting as receiver
+            this.pipelines[pipelineType].receivers.push({
+              type: name, id: name, isConnector: true, settings: {}
+            })
+          } else {
+            const settings = (parsed.receivers && parsed.receivers[name]) ? JSON.parse(JSON.stringify(parsed.receivers[name])) : {}
+            // Try to match with known defaults
+            const baseName = name.split("/")[0]
+            const defaults = COMPONENT_DEFAULTS.receivers[baseName]
+            this.pipelines[pipelineType].receivers.push({
+              type: baseName, id: name, settings: settings
+            })
+            counts.receivers++
+          }
+        })
+
+        // Processors
+        ;(sp.processors || []).forEach(name => {
+          const settings = (parsed.processors && parsed.processors[name]) ? JSON.parse(JSON.stringify(parsed.processors[name])) : {}
+          const baseName = name.split("/")[0]
+          this.pipelines[pipelineType].processors.push({
+            type: baseName, id: name, settings: settings
+          })
+          counts.processors++
+        })
+
+        // Exporters
+        ;(sp.exporters || []).forEach(name => {
+          if (connectorNames.has(name)) {
+            // This is a connector acting as exporter
+            this.pipelines[pipelineType].exporters.push({
+              type: name, id: name, isConnector: true, settings: {}
+            })
+          } else {
+            const settings = (parsed.exporters && parsed.exporters[name]) ? JSON.parse(JSON.stringify(parsed.exporters[name])) : {}
+            const baseName = name.split("/")[0]
+            this.pipelines[pipelineType].exporters.push({
+              type: baseName, id: name, settings: settings
+            })
+            counts.exporters++
+          }
+        })
+      })
+
+      // Build connector configs by finding their from/to pipelines
+      connectorNames.forEach(name => {
+        let fromPipeline = null
+        let toPipeline = null
+
+        Object.keys(this.pipelines).forEach(pt => {
+          if (this.pipelines[pt].exporters.some(c => c.isConnector && c.id === name)) fromPipeline = pt
+          if (this.pipelines[pt].receivers.some(c => c.isConnector && c.id === name)) toPipeline = pt
+        })
+
+        const connSettings = parsed.connectors[name] || {}
+        // Convert structured settings to our internal format for known types
+        const baseName = name.split("/")[0]
+        let internalSettings = {}
+
+        if (baseName === "spanmetrics") {
+          if (connSettings.dimensions) {
+            internalSettings._dimensions = connSettings.dimensions.map(d => d.name || d).join(",")
+          }
+          if (connSettings.histogram?.explicit?.buckets) {
+            internalSettings._buckets = connSettings.histogram.explicit.buckets.join(",")
+          }
+          if (connSettings.namespace) internalSettings.namespace = connSettings.namespace
+        } else {
+          internalSettings = connSettings
+        }
+
+        this.connectorConfigs[name] = {
+          type: baseName,
+          settings: internalSettings,
+          from: fromPipeline || "traces",
+          to: toPipeline || "metrics"
+        }
+      })
+
+      // If no service.pipelines, try to infer from top-level sections
+      if (Object.keys(servicePipelines).length === 0) {
+        // Add all receivers/processors/exporters to traces pipeline as fallback
+        if (parsed.receivers) {
+          Object.keys(parsed.receivers).forEach(name => {
+            if (connectorNames.has(name)) return
+            const baseName = name.split("/")[0]
+            this.pipelines.traces.receivers.push({
+              type: baseName, id: name, settings: JSON.parse(JSON.stringify(parsed.receivers[name] || {}))
+            })
+            counts.receivers++
+          })
+        }
+        if (parsed.processors) {
+          Object.keys(parsed.processors).forEach(name => {
+            const baseName = name.split("/")[0]
+            this.pipelines.traces.processors.push({
+              type: baseName, id: name, settings: JSON.parse(JSON.stringify(parsed.processors[name] || {}))
+            })
+            counts.processors++
+          })
+        }
+        if (parsed.exporters) {
+          Object.keys(parsed.exporters).forEach(name => {
+            if (connectorNames.has(name)) return
+            const baseName = name.split("/")[0]
+            this.pipelines.traces.exporters.push({
+              type: baseName, id: name, settings: JSON.parse(JSON.stringify(parsed.exporters[name] || {}))
+            })
+            counts.exporters++
+          })
+        }
+      }
+
+      // Auto-select first non-empty tab
+      this.autoSelectTab()
+      this.selectedComponent = null
+      this.showNoSelection()
+      this.render()
+      this.generateYaml()
+      this.closeImportModal()
+
+      const parts = []
+      if (counts.receivers) parts.push(`${counts.receivers} receivers`)
+      if (counts.processors) parts.push(`${counts.processors} processors`)
+      if (counts.exporters) parts.push(`${counts.exporters} exporters`)
+      if (counts.connectors) parts.push(`${counts.connectors} connectors`)
+      this.showFeedback(`✓ Imported: ${parts.join(", ")}`)
+
+    } catch(e) {
+      if (this.hasImportErrorTarget) {
+        this.importErrorTarget.textContent = `Parse error: ${e.message}`
+      }
+    }
+  }
+
+  showFeedback(message, color) {
+    const feedback = document.createElement("div")
+    feedback.className = "copy-feedback"
+    if (color) {
+      feedback.style.borderColor = color
+      feedback.style.color = color
+    }
+    feedback.textContent = message
+    document.body.appendChild(feedback)
+    setTimeout(() => feedback.remove(), 2500)
   }
 
   escapeHtml(str) {
