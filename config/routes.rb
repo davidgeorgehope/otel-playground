@@ -4,7 +4,11 @@ Rails.application.routes.draw do
   get "templates", to: "pipeline#templates"
   post "generate_yaml", to: "pipeline#generate_yaml"
 
-  resources :configs, only: [:index, :show, :create, :update, :destroy]
+  resources :configs, only: [:index, :show, :create, :update, :destroy] do
+    member do
+      post :upvote
+    end
+  end
 
   get "up" => "rails/health#show", as: :rails_health_check
 end

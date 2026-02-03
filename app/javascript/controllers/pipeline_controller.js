@@ -335,10 +335,10 @@ export default class extends Controller {
     "receiversDrop", "processorsDrop", "exportersDrop",
     "tracesCount", "metricsCount", "logsCount",
     "configPanel", "yamlPanel", "noSelection", "configFields",
-    "yamlOutput", "saveModal", "saveName", "saveDescription"
+    "yamlOutput", "deployPanel", "instrumentPanel", "saveModal", "saveName", "saveDescription", "saveTags"
   ]
 
-  static values = { template: String }
+  static values = { template: String, loadConfig: String }
 
   connect() {
     this.currentPipelineType = "traces"
@@ -349,6 +349,14 @@ export default class extends Controller {
     // Load template if specified
     if (this.templateValue && TEMPLATES[this.templateValue]) {
       this.loadTemplate(TEMPLATES[this.templateValue])
+    }
+
+    // Load config from gallery
+    if (this.loadConfigValue) {
+      try {
+        const configData = JSON.parse(this.loadConfigValue)
+        this.loadTemplate(configData)
+      } catch(e) {}
     }
 
     this.render()
@@ -438,6 +446,11 @@ export default class extends Controller {
 
     this.render()
     this.generateYaml()
+
+    // Notify tutorial controller
+    document.dispatchEvent(new CustomEvent("tutorial:component-added", {
+      detail: { category, component: componentType }
+    }))
   }
 
   removeComponent(event) {
@@ -485,13 +498,23 @@ export default class extends Controller {
     document.querySelectorAll(".config-panel-tab").forEach(t => t.classList.remove("active"))
     event.currentTarget.classList.add("active")
 
-    if (tab === "config") {
-      this.configPanelTarget.classList.remove("hidden")
-      this.yamlPanelTarget.classList.add("hidden")
-    } else {
-      this.configPanelTarget.classList.add("hidden")
-      this.yamlPanelTarget.classList.remove("hidden")
-      this.generateYaml()
+    const panels = {
+      config: this.configPanelTarget,
+      yaml: this.yamlPanelTarget,
+      deploy: this.hasDeployPanelTarget ? this.deployPanelTarget : null,
+      instrument: this.hasInstrumentPanelTarget ? this.instrumentPanelTarget : null
+    }
+    Object.values(panels).forEach(p => { if (p) p.classList.add("hidden") })
+    if (panels[tab]) panels[tab].classList.remove("hidden")
+
+    if (tab === "yaml") this.generateYaml()
+    if (tab === "deploy") {
+      const dc = this.application.getControllerForElementAndIdentifier(panels.deploy, "deploy")
+      if (dc) dc.generate()
+    }
+    if (tab === "instrument") {
+      const ic = this.application.getControllerForElementAndIdentifier(panels.instrument, "instrument")
+      if (ic) ic.generate()
     }
   }
 
@@ -541,6 +564,9 @@ export default class extends Controller {
       const target = this[`${type}CountTarget`]
       if (target) target.textContent = count
     })
+
+    // Dispatch for validation controller
+    this.element.dispatchEvent(new CustomEvent('pipeline:changed', { detail: this.pipelines }))
   }
 
   // Render component config panel
@@ -563,7 +589,8 @@ export default class extends Controller {
     this.configFieldsTarget.style.display = "block"
 
     let html = `<h4 style="color:var(--green);margin-bottom:0.75rem;font-size:0.9rem">${defaults.label}</h4>`
-    html += `<div style="color:var(--text-dim);font-size:0.75rem;margin-bottom:1rem">ID: ${comp.id}</div>`
+    html += `<div style="color:var(--text-dim);font-size:0.75rem;margin-bottom:0.5rem">ID: ${comp.id}</div>`
+    html += `<button class="btn btn-sm btn-cyan" style="margin-bottom:0.75rem;font-size:0.7rem" data-action="click->simulation#previewSelected">👁 Preview Data</button>`
 
     defaults.fields.forEach(field => {
       const currentValue = this.getNestedValue(comp.settings, field.key) ?? field.default
@@ -886,6 +913,12 @@ export default class extends Controller {
     const pipelineData = JSON.stringify({ pipelines: this.pipelines })
     const yamlOutput = this.yamlOutputTarget.textContent
 
+    // Collect selected tags
+    const tags = []
+    if (this.hasSaveTagsTarget) {
+      this.saveTagsTarget.querySelectorAll("input:checked").forEach(cb => tags.push(cb.value))
+    }
+
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
 
     fetch("/configs", {
@@ -900,7 +933,8 @@ export default class extends Controller {
           name: name,
           description: description,
           pipeline_data: pipelineData,
-          yaml_output: yamlOutput
+          yaml_output: yamlOutput,
+          tags: JSON.stringify(tags)
         }
       })
     }).then(response => {

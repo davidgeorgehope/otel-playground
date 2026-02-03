@@ -1,13 +1,26 @@
 <div class="config-show">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
     <div>
       <h1><%= @config.name %></h1>
       <% if @config.description.present? %>
         <p class="description"><%= @config.description %></p>
       <% end %>
+      <% if @config.parsed_tags.any? %>
+        <div class="show-tags" style="margin-top:0.5rem">
+          <% @config.parsed_tags.each do |tag| %>
+            <a href="<%= configs_path(tag: tag) %>" class="card-tag">#<%= tag %></a>
+          <% end %>
+        </div>
+      <% end %>
     </div>
-    <div style="display:flex;gap:0.5rem">
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <a href="/?load=<%= @config.share_token %>" class="btn btn-green btn-sm">🔧 Load in Builder</a>
       <button class="btn btn-green btn-sm" onclick="copyConfigYaml()">📋 Copy YAML</button>
+      <button class="upvote-btn show-upvote <%= 'upvoted' if cookies["upvoted_#{@config.id}"].present? %>"
+              onclick="upvoteConfig('<%= @config.share_token %>', this)"
+              <%= 'disabled' if cookies["upvoted_#{@config.id}"].present? %>>
+        ▲ <span class="upvote-count"><%= @config.upvotes %></span>
+      </button>
       <a href="/configs" class="btn btn-sm">← Back</a>
     </div>
   </div>
@@ -15,6 +28,7 @@
   <div class="yaml-block" id="config-yaml"><%= @config.yaml_output %></div>
 
   <div class="meta">
+    <span>▲ <%= @config.upvotes %> upvotes</span>
     <span>👁 <%= @config.views_count %> views</span>
     <span>Created <%= time_ago_in_words(@config.created_at) %> ago</span>
     <span>Share: <code style="color:var(--green)">/configs/<%= @config.share_token %></code></span>
@@ -54,5 +68,17 @@ function copyConfigYaml() {
     document.body.appendChild(feedback);
     setTimeout(() => feedback.remove(), 2000);
   });
+}
+function upvoteConfig(shareToken, btn) {
+  if (btn.disabled) return;
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+  fetch(`/configs/${shareToken}/upvote`, {
+    method: 'POST',
+    headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrfToken }
+  }).then(r => r.json()).then(data => {
+    btn.querySelector('.upvote-count').textContent = data.upvotes;
+    btn.classList.add('upvoted');
+    btn.disabled = true;
+  }).catch(() => {});
 }
 </script>

@@ -3,6 +3,10 @@ class PipelineController < ApplicationController
 
   def builder
     @template = params[:template]
+    if params[:load].present?
+      config = Config.find_by(share_token: params[:load])
+      @load_config = config&.pipeline_data
+    end
   end
 
   def templates
@@ -10,7 +14,6 @@ class PipelineController < ApplicationController
 
   def generate_yaml
     begin
-      # Get the raw JSON body and parse it ourselves
       body = request.body.read
       parsed = JSON.parse(body)
       pipeline_data = parsed["pipeline_data"]

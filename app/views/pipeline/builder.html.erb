@@ -1,4 +1,4 @@
-<div class="builder-container" data-controller="pipeline" data-pipeline-template-value="<%= @template || '' %>">
+<div class="builder-container" data-controller="pipeline simulation validation" data-pipeline-template-value="<%= @template || '' %>" data-pipeline-load-config-value="<%= @load_config || '' %>">
   <!-- Pipeline Type Tabs -->
   <div class="pipeline-tabs">
     <button class="pipeline-tab active" data-action="click->pipeline#switchTab" data-pipeline-type-param="traces">
@@ -11,6 +11,7 @@
       ▸ Logs <span class="tab-count" data-pipeline-target="logsCount">0</span>
     </button>
     <div style="flex:1"></div>
+    <button class="btn btn-amber btn-sm" style="margin:0.3rem 0" data-sim-btn data-action="click->simulation#start">▶ Simulate</button>
     <button class="btn btn-green btn-sm" style="margin:0.3rem 0" data-action="click->pipeline#openSaveModal">
       ⬆ Save Config
     </button>
@@ -173,13 +174,47 @@
         </div>
       </div>
     </div>
+
+    <!-- Validation Panel -->
+    <div class="validation-panel" style="display:none" data-validation-target="panel">
+      <div class="validation-header" data-action="click->validation#toggle">
+        <span>⚠ Validation Warnings <span data-validation-target="count" style="background:var(--amber-dim);color:var(--bg);padding:0.1rem 0.4rem;border-radius:3px;font-size:0.65rem;font-weight:700;margin-left:0.3rem">0</span></span>
+        <span data-validation-target="chevron">▾</span>
+      </div>
+      <div class="validation-body" data-validation-target="body"></div>
+    </div>
+
+    <!-- Simulation Overlay -->
+    <div class="sim-overlay" data-simulation-target="overlay">
+      <div class="sim-toolbar">
+        <div style="color:var(--text)">▶ Pipeline Simulation — <span class="sim-type-label">traces</span></div>
+        <div class="sim-progress"><div class="sim-progress-fill"></div></div>
+        <button class="btn btn-sm" data-action="click->simulation#closeOverlay">✕ Close</button>
+      </div>
+      <div class="sim-body">
+        <div class="sim-canvas" data-simulation-target="simCanvas"></div>
+        <div class="sim-log-panel">
+          <div class="sim-log-header">📡 Event Log</div>
+          <div class="sim-log-entries" data-simulation-target="logEntries"></div>
+        </div>
+      </div>
+      <div class="sim-summary" data-simulation-target="summaryPanel">
+        <div class="sim-summary-header">
+          <h3>✓ Simulation Complete</h3>
+          <button class="btn btn-sm" data-action="click->simulation#closeOverlay">✕ Close</button>
+        </div>
+        <div data-simulation-target="summaryContent"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Right Sidebar: Config + YAML -->
   <div class="config-sidebar">
-    <div class="config-panel-tabs">
+    <div class="config-panel-tabs" style="flex-wrap:wrap">
       <button class="config-panel-tab active" data-action="click->pipeline#switchConfigTab" data-tab="config">Component</button>
       <button class="config-panel-tab" data-action="click->pipeline#switchConfigTab" data-tab="yaml">YAML Output</button>
+      <button class="config-panel-tab" data-action="click->pipeline#switchConfigTab" data-tab="deploy">📦 Deploy</button>
+      <button class="config-panel-tab" data-action="click->pipeline#switchConfigTab" data-tab="instrument">🚀 Instrument</button>
     </div>
 
     <!-- Component Config Tab -->
@@ -205,6 +240,59 @@
         </div>
       </div>
     </div>
+
+    <!-- Deploy Tab -->
+    <div class="config-panel-content hidden" data-pipeline-target="deployPanel" data-controller="deploy">
+      <div class="deploy-panel">
+        <div class="deploy-subtabs">
+          <button class="deploy-subtab active" data-deploy-target="subtab" data-format="docker-compose" data-action="click->deploy#switchFormat">Docker Compose</button>
+          <button class="deploy-subtab" data-deploy-target="subtab" data-format="k8s-daemonset" data-action="click->deploy#switchFormat">K8s DaemonSet</button>
+          <button class="deploy-subtab" data-deploy-target="subtab" data-format="k8s-deployment" data-action="click->deploy#switchFormat">K8s Deployment</button>
+          <button class="deploy-subtab" data-deploy-target="subtab" data-format="helm-values" data-action="click->deploy#switchFormat">Helm Values</button>
+        </div>
+        <div class="yaml-actions">
+          <button class="btn btn-green btn-sm" data-action="click->deploy#copy">📋 Copy</button>
+        </div>
+        <div class="yaml-output" data-deploy-target="output"># Add components to your pipeline first</div>
+      </div>
+    </div>
+
+    <!-- Instrument Tab -->
+    <div class="config-panel-content hidden" data-pipeline-target="instrumentPanel" data-controller="instrument">
+      <div class="instrument-panel">
+        <div class="deploy-subtabs">
+          <button class="deploy-subtab active" data-instrument-target="langtab" data-lang="python" data-action="click->instrument#switchLang">Python</button>
+          <button class="deploy-subtab" data-instrument-target="langtab" data-lang="nodejs" data-action="click->instrument#switchLang">Node.js</button>
+          <button class="deploy-subtab" data-instrument-target="langtab" data-lang="go" data-action="click->instrument#switchLang">Go</button>
+          <button class="deploy-subtab" data-instrument-target="langtab" data-lang="java" data-action="click->instrument#switchLang">Java</button>
+        </div>
+        <div class="yaml-actions">
+          <button class="btn btn-green btn-sm" data-action="click->instrument#copy">📋 Copy</button>
+        </div>
+        <div class="install-cmd" data-instrument-target="installCmd"></div>
+        <div class="yaml-output" data-instrument-target="output"># Add receivers to your pipeline first</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- Data Preview Panel -->
+<div class="data-preview-panel" data-simulation-target="previewPanel">
+  <div class="data-preview-header">
+    <h3 data-simulation-target="previewTitle">Component Data Preview</h3>
+    <button class="btn btn-sm" data-action="click->simulation#closePreview">✕ Close</button>
+  </div>
+  <div class="data-preview-body">
+    <div class="data-preview-col">
+      <h4>▸ Before (Input)</h4>
+      <pre data-simulation-target="previewBefore"></pre>
+    </div>
+    <div class="data-preview-col">
+      <h4>▸ After (Output)</h4>
+      <pre data-simulation-target="previewAfter"></pre>
+    </div>
   </div>
 </div>
 
@@ -219,6 +307,20 @@
     <div class="config-field">
       <label>Description</label>
       <textarea data-pipeline-target="saveDescription" placeholder="What this config does..."></textarea>
+    </div>
+    <div class="config-field">
+      <label>Tags</label>
+      <div class="save-tags" data-pipeline-target="saveTags">
+        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="kubernetes"> kubernetes</label>
+        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="docker"> docker</label>
+        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="logs"> logs</label>
+        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="traces"> traces</label>
+        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="metrics"> metrics</label>
+        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="production"> production</label>
+        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="development"> development</label>
+        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="monitoring"> monitoring</label>
+        <label class="save-tag-label" onclick="this.classList.toggle('checked')"><input type="checkbox" value="alerting"> alerting</label>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn" data-action="click->pipeline#closeSaveModal">Cancel</button>

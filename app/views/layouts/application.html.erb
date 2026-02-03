@@ -10,7 +10,7 @@
   <%= javascript_importmap_tags %>
   <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
-<body>
+<body data-controller="tutorial">
   <nav class="top-nav">
     <div class="nav-left">
       <a href="/" class="nav-brand">
@@ -22,6 +22,9 @@
       <a href="/" class="nav-link <%= 'active' if controller_name == 'pipeline' && action_name == 'builder' %>">Builder</a>
       <a href="/templates" class="nav-link <%= 'active' if controller_name == 'pipeline' && action_name == 'templates' %>">Templates</a>
       <a href="/configs" class="nav-link <%= 'active' if controller_name == 'configs' %>">Community</a>
+      <% if controller_name == 'pipeline' && action_name == 'builder' %>
+        <button class="tutorial-btn" data-action="click->tutorial#start">🎓 Tutorial</button>
+      <% end %>
     </div>
   </nav>
 

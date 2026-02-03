@@ -1,27 +1,112 @@
-<div class="page-container">
-  <h1 class="page-title">▸ Community Configs</h1>
-  <p class="page-subtitle">Browse and share OpenTelemetry Collector configurations.</p>
+<div class="page-container gallery-page">
+  <div class="gallery-header">
+    <div>
+      <h1 class="page-title">▸ Community Gallery</h1>
+      <p class="page-subtitle">Browse, search, and share OpenTelemetry Collector configurations.</p>
+    </div>
+    <a href="/" class="btn btn-green">+ Build New Config</a>
+  </div>
+
+  <!-- Search & Filters -->
+  <div class="gallery-controls">
+    <div class="gallery-search">
+      <%= form_tag configs_path, method: :get, class: "search-form" do %>
+        <input type="text" name="q" value="<%= @search_query %>" placeholder="🔍 Search configs..." class="search-input">
+        <input type="hidden" name="sort" value="<%= @current_sort %>">
+        <input type="hidden" name="tag" value="<%= @current_tag %>">
+      <% end %>
+    </div>
+    <div class="gallery-sort">
+      <a href="<%= configs_path(sort: 'newest', tag: @current_tag, q: @search_query) %>"
+         class="sort-btn <%= 'active' if @current_sort == 'newest' %>">⏱ Newest</a>
+      <a href="<%= configs_path(sort: 'popular', tag: @current_tag, q: @search_query) %>"
+         class="sort-btn <%= 'active' if @current_sort == 'popular' %>">🔥 Popular</a>
+      <a href="<%= configs_path(sort: 'views', tag: @current_tag, q: @search_query) %>"
+         class="sort-btn <%= 'active' if @current_sort == 'views' %>">👁 Most Viewed</a>
+    </div>
+  </div>
+
+  <!-- Tag Filters -->
+  <div class="gallery-tags">
+    <a href="<%= configs_path(sort: @current_sort, q: @search_query) %>"
+       class="tag-filter <%= 'active' unless @current_tag %>">All</a>
+    <% Config::AVAILABLE_TAGS.each do |tag| %>
+      <a href="<%= configs_path(sort: @current_sort, tag: tag, q: @search_query) %>"
+         class="tag-filter <%= 'active' if @current_tag == tag %>"><%= tag %></a>
+    <% end %>
+  </div>
 
   <% if @configs.any? %>
-    <div class="config-list">
+    <div class="gallery-grid">
       <% @configs.each do |config| %>
-        <a href="<%= config_path(config.share_token) %>" class="config-card">
-          <div class="config-card-info">
-            <h3><%= config.name %></h3>
-            <p><%= truncate(config.description || "No description", length: 100) %></p>
+        <div class="gallery-card">
+          <div class="gallery-card-header">
+            <h3><a href="<%= config_path(config.share_token) %>"><%= config.name %></a></h3>
+            <% if config.pipeline_summary.present? %>
+              <div class="pipeline-summary"><%= config.pipeline_summary %></div>
+            <% end %>
           </div>
-          <div class="config-card-meta">
-            <div>👁 <%= config.views_count %> views</div>
-            <div><%= time_ago_in_words(config.created_at) %> ago</div>
+
+          <% if config.description.present? %>
+            <p class="gallery-card-desc"><%= truncate(config.description, length: 120) %></p>
+          <% end %>
+
+          <% components = config.component_names %>
+          <div class="gallery-components">
+            <% components[:receivers].first(3).each do |c| %>
+              <span class="comp-badge receiver"><%= c %></span>
+            <% end %>
+            <% components[:processors].first(3).each do |c| %>
+              <span class="comp-badge processor"><%= c %></span>
+            <% end %>
+            <% components[:exporters].first(3).each do |c| %>
+              <span class="comp-badge exporter"><%= c %></span>
+            <% end %>
           </div>
-        </a>
+
+          <% if config.parsed_tags.any? %>
+            <div class="gallery-card-tags">
+              <% config.parsed_tags.each do |tag| %>
+                <a href="<%= configs_path(tag: tag) %>" class="card-tag">#<%= tag %></a>
+              <% end %>
+            </div>
+          <% end %>
+
+          <div class="gallery-card-footer">
+            <div class="gallery-card-stats">
+              <button class="upvote-btn <%= 'upvoted' if cookies["upvoted_#{config.id}"].present? %>"
+                      onclick="upvoteConfig('<%= config.share_token %>', this)"
+                      <%= 'disabled' if cookies["upvoted_#{config.id}"].present? %>>
+                ▲ <span class="upvote-count"><%= config.upvotes %></span>
+              </button>
+              <span class="stat">👁 <%= config.views_count %></span>
+              <span class="stat"><%= time_ago_in_words(config.created_at) %> ago</span>
+            </div>
+            <a href="/?load=<%= config.share_token %>" class="btn btn-green btn-sm use-btn">Use This →</a>
+          </div>
+        </div>
       <% end %>
     </div>
   <% else %>
     <div class="empty-state">
       <div class="icon">📦</div>
-      <p>No configs saved yet.</p>
+      <p>No configs found<%= " matching '#{@search_query}'" if @search_query.present? %><%= " tagged '#{@current_tag}'" if @current_tag.present? %>.</p>
       <p style="margin-top:0.5rem"><a href="/" class="btn btn-green" style="display:inline-flex">Go build one →</a></p>
     </div>
   <% end %>
 </div>
+
+<script>
+function upvoteConfig(shareToken, btn) {
+  if (btn.disabled) return;
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+  fetch(`/configs/${shareToken}/upvote`, {
+    method: 'POST',
+    headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrfToken }
+  }).then(r => r.json()).then(data => {
+    btn.querySelector('.upvote-count').textContent = data.upvotes;
+    btn.classList.add('upvoted');
+    btn.disabled = true;
+  }).catch(() => {});
+}
+</script>
