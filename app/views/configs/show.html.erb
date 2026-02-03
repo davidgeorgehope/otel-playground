@@ -1,0 +1,58 @@
+<div class="config-show">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
+    <div>
+      <h1><%= @config.name %></h1>
+      <% if @config.description.present? %>
+        <p class="description"><%= @config.description %></p>
+      <% end %>
+    </div>
+    <div style="display:flex;gap:0.5rem">
+      <button class="btn btn-green btn-sm" onclick="copyConfigYaml()">📋 Copy YAML</button>
+      <a href="/configs" class="btn btn-sm">← Back</a>
+    </div>
+  </div>
+
+  <div class="yaml-block" id="config-yaml"><%= @config.yaml_output %></div>
+
+  <div class="meta">
+    <span>👁 <%= @config.views_count %> views</span>
+    <span>Created <%= time_ago_in_words(@config.created_at) %> ago</span>
+    <span>Share: <code style="color:var(--green)">/configs/<%= @config.share_token %></code></span>
+  </div>
+
+  <div style="margin-top:2rem">
+    <% pipeline_data = @config.parsed_pipeline_data %>
+    <% if pipeline_data["pipelines"] %>
+      <h3 style="color:var(--amber);font-size:0.9rem;margin-bottom:0.75rem">Pipeline Components</h3>
+      <% pipeline_data["pipelines"].each do |pipeline_type, pipeline| %>
+        <div style="margin-bottom:0.75rem">
+          <span style="color:var(--text-dim);font-size:0.8rem;text-transform:uppercase"><%= pipeline_type %></span>
+          <div class="template-components" style="margin-top:0.3rem">
+            <% (pipeline["receivers"] || []).each do |comp| %>
+              <span class="template-tag receiver"><%= comp["type"] || comp["id"] %></span>
+            <% end %>
+            <% (pipeline["processors"] || []).each do |comp| %>
+              <span class="template-tag processor"><%= comp["type"] || comp["id"] %></span>
+            <% end %>
+            <% (pipeline["exporters"] || []).each do |comp| %>
+              <span class="template-tag exporter"><%= comp["type"] || comp["id"] %></span>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    <% end %>
+  </div>
+</div>
+
+<script>
+function copyConfigYaml() {
+  const yaml = document.getElementById("config-yaml").textContent;
+  navigator.clipboard.writeText(yaml).then(() => {
+    const feedback = document.createElement("div");
+    feedback.className = "copy-feedback";
+    feedback.textContent = "✓ Copied to clipboard";
+    document.body.appendChild(feedback);
+    setTimeout(() => feedback.remove(), 2000);
+  });
+}
+</script>

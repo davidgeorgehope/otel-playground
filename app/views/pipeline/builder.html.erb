@@ -1,0 +1,228 @@
+<div class="builder-container" data-controller="pipeline" data-pipeline-template-value="<%= @template || '' %>">
+  <!-- Pipeline Type Tabs -->
+  <div class="pipeline-tabs">
+    <button class="pipeline-tab active" data-action="click->pipeline#switchTab" data-pipeline-type-param="traces">
+      ▸ Traces <span class="tab-count" data-pipeline-target="tracesCount">0</span>
+    </button>
+    <button class="pipeline-tab" data-action="click->pipeline#switchTab" data-pipeline-type-param="metrics">
+      ▸ Metrics <span class="tab-count" data-pipeline-target="metricsCount">0</span>
+    </button>
+    <button class="pipeline-tab" data-action="click->pipeline#switchTab" data-pipeline-type-param="logs">
+      ▸ Logs <span class="tab-count" data-pipeline-target="logsCount">0</span>
+    </button>
+    <div style="flex:1"></div>
+    <button class="btn btn-green btn-sm" style="margin:0.3rem 0" data-action="click->pipeline#openSaveModal">
+      ⬆ Save Config
+    </button>
+  </div>
+
+  <!-- Component Palette -->
+  <div class="component-palette">
+    <div class="palette-section">
+      <div class="palette-section-title">⬤ Receivers</div>
+      <div class="palette-item" draggable="true" data-category="receivers" data-component="otlp"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> otlp
+      </div>
+      <div class="palette-item" draggable="true" data-category="receivers" data-component="prometheus"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> prometheus
+      </div>
+      <div class="palette-item" draggable="true" data-category="receivers" data-component="hostmetrics"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> hostmetrics
+      </div>
+      <div class="palette-item" draggable="true" data-category="receivers" data-component="filelog"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> filelog
+      </div>
+      <div class="palette-item" draggable="true" data-category="receivers" data-component="journald"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> journald
+      </div>
+      <div class="palette-item" draggable="true" data-category="receivers" data-component="k8s_events"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> k8s_events
+      </div>
+      <div class="palette-item" draggable="true" data-category="receivers" data-component="zipkin"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> zipkin
+      </div>
+      <div class="palette-item" draggable="true" data-category="receivers" data-component="jaeger"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> jaeger
+      </div>
+    </div>
+
+    <div class="palette-section">
+      <div class="palette-section-title">⬤ Processors</div>
+      <div class="palette-item" draggable="true" data-category="processors" data-component="batch"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> batch
+      </div>
+      <div class="palette-item" draggable="true" data-category="processors" data-component="memory_limiter"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> memory_limiter
+      </div>
+      <div class="palette-item" draggable="true" data-category="processors" data-component="attributes"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> attributes
+      </div>
+      <div class="palette-item" draggable="true" data-category="processors" data-component="filter"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> filter
+      </div>
+      <div class="palette-item" draggable="true" data-category="processors" data-component="transform"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> transform
+      </div>
+      <div class="palette-item" draggable="true" data-category="processors" data-component="resource"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> resource
+      </div>
+      <div class="palette-item" draggable="true" data-category="processors" data-component="probabilistic_sampler"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> probabilistic_sampler
+      </div>
+      <div class="palette-item" draggable="true" data-category="processors" data-component="tail_sampling"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> tail_sampling
+      </div>
+      <div class="palette-item" draggable="true" data-category="processors" data-component="k8s_attributes"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> k8s_attributes
+      </div>
+      <div class="palette-item" draggable="true" data-category="processors" data-component="resourcedetection"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> resourcedetection
+      </div>
+    </div>
+
+    <div class="palette-section">
+      <div class="palette-section-title">⬤ Exporters</div>
+      <div class="palette-item" draggable="true" data-category="exporters" data-component="otlp"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> otlp
+      </div>
+      <div class="palette-item" draggable="true" data-category="exporters" data-component="otlphttp"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> otlphttp
+      </div>
+      <div class="palette-item" draggable="true" data-category="exporters" data-component="prometheus"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> prometheus
+      </div>
+      <div class="palette-item" draggable="true" data-category="exporters" data-component="debug"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> debug
+      </div>
+      <div class="palette-item" draggable="true" data-category="exporters" data-component="file"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> file
+      </div>
+      <div class="palette-item" draggable="true" data-category="exporters" data-component="elasticsearch"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> elasticsearch
+      </div>
+      <div class="palette-item" draggable="true" data-category="exporters" data-component="loki"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> loki
+      </div>
+    </div>
+
+    <div class="palette-section">
+      <div class="palette-section-title">⬤ Connectors</div>
+      <div class="palette-item" draggable="true" data-category="connectors" data-component="spanmetrics"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> spanmetrics
+      </div>
+      <div class="palette-item" draggable="true" data-category="connectors" data-component="count"
+           data-action="dragstart->pipeline#dragStart click->pipeline#addComponent">
+        <span class="dot"></span> count
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline Canvas -->
+  <div class="pipeline-canvas">
+    <div class="pipeline-flow">
+      <div class="pipeline-column" data-type="receivers">
+        <div class="pipeline-column-header">Receivers</div>
+        <div class="pipeline-components"
+             data-pipeline-target="receiversDrop"
+             data-action="dragover->pipeline#dragOver dragleave->pipeline#dragLeave drop->pipeline#drop"
+             data-drop-category="receivers">
+        </div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-column" data-type="processors">
+        <div class="pipeline-column-header">Processors</div>
+        <div class="pipeline-components"
+             data-pipeline-target="processorsDrop"
+             data-action="dragover->pipeline#dragOver dragleave->pipeline#dragLeave drop->pipeline#drop"
+             data-drop-category="processors">
+        </div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-column" data-type="exporters">
+        <div class="pipeline-column-header">Exporters</div>
+        <div class="pipeline-components"
+             data-pipeline-target="exportersDrop"
+             data-action="dragover->pipeline#dragOver dragleave->pipeline#dragLeave drop->pipeline#drop"
+             data-drop-category="exporters">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Sidebar: Config + YAML -->
+  <div class="config-sidebar">
+    <div class="config-panel-tabs">
+      <button class="config-panel-tab active" data-action="click->pipeline#switchConfigTab" data-tab="config">Component</button>
+      <button class="config-panel-tab" data-action="click->pipeline#switchConfigTab" data-tab="yaml">YAML Output</button>
+    </div>
+
+    <!-- Component Config Tab -->
+    <div class="config-panel-content" data-pipeline-target="configPanel">
+      <div class="config-form">
+        <div class="no-selection" data-pipeline-target="noSelection">
+          Click a component in the pipeline to configure it
+        </div>
+        <div data-pipeline-target="configFields" style="display:none">
+        </div>
+      </div>
+    </div>
+
+    <!-- YAML Output Tab -->
+    <div class="config-panel-content hidden" data-pipeline-target="yamlPanel">
+      <div class="yaml-panel">
+        <div class="yaml-actions">
+          <button class="btn btn-green btn-sm" data-action="click->pipeline#copyYaml">📋 Copy</button>
+          <button class="btn btn-sm" data-action="click->pipeline#clearPipeline">✕ Clear</button>
+        </div>
+        <div class="yaml-output" data-pipeline-target="yamlOutput">
+# Add components to your pipeline to generate config
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Save Modal -->
+<div class="modal-overlay" data-pipeline-target="saveModal">
+  <div class="modal">
+    <h3>⬆ Save Configuration</h3>
+    <div class="config-field">
+      <label>Name</label>
+      <input type="text" data-pipeline-target="saveName" placeholder="My OTel Config">
+    </div>
+    <div class="config-field">
+      <label>Description</label>
+      <textarea data-pipeline-target="saveDescription" placeholder="What this config does..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" data-action="click->pipeline#closeSaveModal">Cancel</button>
+      <button class="btn btn-green" data-action="click->pipeline#saveConfig">Save</button>
+    </div>
+  </div>
+</div>

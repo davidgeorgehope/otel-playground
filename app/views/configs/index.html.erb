@@ -1,0 +1,27 @@
+<div class="page-container">
+  <h1 class="page-title">▸ Community Configs</h1>
+  <p class="page-subtitle">Browse and share OpenTelemetry Collector configurations.</p>
+
+  <% if @configs.any? %>
+    <div class="config-list">
+      <% @configs.each do |config| %>
+        <a href="<%= config_path(config.share_token) %>" class="config-card">
+          <div class="config-card-info">
+            <h3><%= config.name %></h3>
+            <p><%= truncate(config.description || "No description", length: 100) %></p>
+          </div>
+          <div class="config-card-meta">
+            <div>👁 <%= config.views_count %> views</div>
+            <div><%= time_ago_in_words(config.created_at) %> ago</div>
+          </div>
+        </a>
+      <% end %>
+    </div>
+  <% else %>
+    <div class="empty-state">
+      <div class="icon">📦</div>
+      <p>No configs saved yet.</p>
+      <p style="margin-top:0.5rem"><a href="/" class="btn btn-green" style="display:inline-flex">Go build one →</a></p>
+    </div>
+  <% end %>
+</div>

@@ -1,0 +1,65 @@
+<div class="page-container">
+  <h1 class="page-title">▸ Starter Templates</h1>
+  <p class="page-subtitle">Pre-built OpenTelemetry Collector configurations to get you started quickly.</p>
+
+  <div class="template-grid">
+    <a href="/?template=basic" class="template-card">
+      <h3>Basic Pipeline</h3>
+      <p>Simple OTLP receiver with batch processing and debug output. Perfect for getting started.</p>
+      <div class="template-components">
+        <span class="template-tag receiver">otlp</span>
+        <span class="template-tag processor">batch</span>
+        <span class="template-tag exporter">debug</span>
+      </div>
+    </a>
+
+    <a href="/?template=kubernetes" class="template-card">
+      <h3>Kubernetes</h3>
+      <p>K8s events and OTLP receivers with Kubernetes attributes enrichment. Ready for cluster deployment.</p>
+      <div class="template-components">
+        <span class="template-tag receiver">otlp</span>
+        <span class="template-tag receiver">k8s_events</span>
+        <span class="template-tag processor">k8s_attributes</span>
+        <span class="template-tag processor">batch</span>
+        <span class="template-tag exporter">otlp</span>
+      </div>
+    </a>
+
+    <a href="/?template=hostmonitoring" class="template-card">
+      <h3>Host Monitoring</h3>
+      <p>System metrics collection with CPU, memory, disk, and network scrapers exposed via Prometheus.</p>
+      <div class="template-components">
+        <span class="template-tag receiver">hostmetrics</span>
+        <span class="template-tag processor">batch</span>
+        <span class="template-tag processor">memory_limiter</span>
+        <span class="template-tag exporter">prometheus</span>
+      </div>
+    </a>
+
+    <a href="/?template=logpipeline" class="template-card">
+      <h3>Log Pipeline</h3>
+      <p>File-based log collection with attribute enrichment and filtering, exported via OTLP HTTP.</p>
+      <div class="template-components">
+        <span class="template-tag receiver">filelog</span>
+        <span class="template-tag processor">attributes</span>
+        <span class="template-tag processor">filter</span>
+        <span class="template-tag exporter">otlphttp</span>
+      </div>
+    </a>
+
+    <a href="/?template=fullstack" class="template-card">
+      <h3>Full Stack</h3>
+      <p>Complete observability setup with traces, metrics, and logs pipelines — everything you need.</p>
+      <div class="template-components">
+        <span class="template-tag receiver">otlp</span>
+        <span class="template-tag receiver">hostmetrics</span>
+        <span class="template-tag receiver">filelog</span>
+        <span class="template-tag processor">batch</span>
+        <span class="template-tag processor">memory_limiter</span>
+        <span class="template-tag processor">resource</span>
+        <span class="template-tag exporter">otlp</span>
+        <span class="template-tag exporter">prometheus</span>
+      </div>
+    </a>
+  </div>
+</div>

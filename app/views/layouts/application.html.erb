@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OTel Playground — Visual OpenTelemetry Collector Config Builder</title>
+  <%= csrf_meta_tags %>
+  <%= csp_meta_tag %>
+  <%= stylesheet_link_tag "application" %>
+  <%= javascript_importmap_tags %>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <nav class="top-nav">
+    <div class="nav-left">
+      <a href="/" class="nav-brand">
+        <span class="brand-icon">◈</span>
+        <span class="brand-text">OTel Playground</span>
+      </a>
+    </div>
+    <div class="nav-right">
+      <a href="/" class="nav-link <%= 'active' if controller_name == 'pipeline' && action_name == 'builder' %>">Builder</a>
+      <a href="/templates" class="nav-link <%= 'active' if controller_name == 'pipeline' && action_name == 'templates' %>">Templates</a>
+      <a href="/configs" class="nav-link <%= 'active' if controller_name == 'configs' %>">Community</a>
+    </div>
+  </nav>
+
+  <% if flash[:notice] %>
+    <div class="flash-notice"><%= flash[:notice] %></div>
+  <% end %>
+
+  <main>
+    <%= yield %>
+  </main>
+
+  <div class="scanlines"></div>
+</body>
+</html>
